@@ -1,9 +1,12 @@
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
+const mg = require('nodemailer-mailgun-transport');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const { response } = require('express');
 require('dotenv').config();
+
 const app = express();
 
 
@@ -17,6 +20,20 @@ app.use(express.json());
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@jekula.lv2vhda.mongodb.net/?retryWrites=true&w=majority`;
 
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 }); 
+
+
+
+// Mailgun
+// const auth = {
+//   auth: {
+//     api_key: 'key-cb067cb29a66024736724a8546832b17',
+//     domain: 'sandboxee7eccaf82ed436f897830ca5eb4290a.mailgun.org'
+//   }
+// }
+
+// const nodemailerMailgun = nodemailer.createTransport(mg(auth));
+
+
 
 
 //jwt verify
@@ -47,6 +64,7 @@ async function run(){
         const savedOrderCollection = client.db('product').collection('order-saved')
         const partsCollection = client.db('product').collection('parts')
         const userCollection = client.db('product').collection('users')
+        const contactCollection = client.db('product').collection('contact')
 
   
 
@@ -64,6 +82,17 @@ async function run(){
 //     res.status(403).send({ message: 'forbidden' });
 //   }
 // }
+
+//Mailgun Sender
+
+
+
+
+
+
+
+
+
 
 
 //Get Admin
@@ -107,19 +136,42 @@ app.get('/admin/:email', async(req, res) => {
 //Order Data   
 
    
-        app.get('/order', verifyJWT, async (req, res) => {
-          const user = req.query.user;
-          const decodedEmail = req.decoded.email;
-          if (user === decodedEmail) {
-            const query = { user: user };
-            const save = await productCollection.find(query).toArray();
-            return res.send(save);
-          }
-          else {
-            return res.status(403).send({ message: 'forbidden access' });
-          }
-        })
+        // app.get('/order', verifyJWT, async (req, res) => {
+        //   const user = req.query.user;
+        //   const decodedEmail = req.decoded.email;
+        //   if (user === decodedEmail) {
+        //     const query = { user: user };
+        //     const save = await productCollection.find(query).toArray();
+        //     return res.send(save);
+        //   }
+        //   else {
+        //     return res.status(403).send({ message: 'forbidden access' });
+        //   }
+        // })
 
+// for admin
+        app.get('/order', verifyJWT, async (req, res) => {
+          const query = {};
+          const cursor = productCollection.find(query);
+          const mobiles = await cursor.toArray();
+          res.send(mobiles);
+      })
+
+      // //order Delete
+      // app.delete('/order/:id', async(req, res) => {
+      //   const id = req.params.id;
+      //   const query = {_id: ObjectId(id)};
+      //   const result = await productCollection.deleteOne(query);
+      //   res.send({success: true,  result});
+      // })
+
+      // for user
+      app.get('/order', verifyJWT, async (req, res) => {
+        const query = {};
+        const cursor = productCollection.find(query);
+        const mobiles = await cursor.toArray();
+        res.send(mobiles);
+    })
 
 //All user Data   
 
@@ -171,7 +223,7 @@ const updateDoc = {
 };
 const result = await userCollection.updateOne(filter, updateDoc, options);
 const token = jwt.sign({email:email}, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
-res.send({result, token});
+res.send(result);
 
 
 })
@@ -182,23 +234,23 @@ res.send({result, token});
 
 
         //get data for saved order
-        app.get('/saved', async (req, res) => {
-          const query = {};
-          const cursor = savedOrderCollection.find(query);
-          const mobiles = await cursor.toArray();
-          res.send(mobiles);
-      })
+      //   app.get('/saved', async (req, res) => {
+      //     const query = {};
+      //     const cursor = savedOrderCollection.find(query);
+      //     const mobiles = await cursor.toArray();
+      //     res.send(mobiles);
+      // })
 
       //Admin get Product
         
-      app.get('/saved', async(req, res) => {
-        const email = req.query.email;
-        console.log(email);
-          const query = {user: email};
-          const cursor = savedOrderCollection.find(query);
-          const data  = await cursor.toArray();
-         res.send(data);
-      })
+      // app.get('/saved', async(req, res) => {
+      //   const email = req.query.email;
+      //   console.log(email);
+      //     const query = {user: email};
+      //     const cursor = savedOrderCollection.find(query);
+      //     const data  = await cursor.toArray();
+      //    res.send(data);
+      // })
 
 
         app.get('/parts', async (req, res) => {
@@ -230,11 +282,40 @@ res.send({result, token});
 
 
 
+        app.post("/contact", async(req, res) => {
+          const contact = req.body;
+          const result = await contactCollection.insertOne(contact);
+          res.send({success: true,  result});
+        })
+
+
         app.post("/order", async(req, res) => {
           const order = req.body;
           const result = await productCollection.insertOne(order);
           res.send({success: true,  result});
         })
+
+//Delete user
+        app.delete("/userDelete/:id", async (req, res) => {
+          const id = req.params.id;
+          const filter = { _id: ObjectId(id) };
+          const result = await userCollection.deleteOne(filter);
+          res.send(result);
+        });
+
+//Delete user
+app.delete("/deleteOrder/:id", async (req, res) => {
+  const id = req.params.id;
+  const filter = { _id: ObjectId(id) };
+  const result = await productCollection.deleteOne(filter);
+  res.send(result);
+});
+
+
+
+
+
+
 
 
         app.post("/saved", async(req, res) => {
@@ -245,10 +326,17 @@ res.send({result, token});
         
         //Delete Product
       
-
+        app.get('/people', function (req, res) {
+          res.send('hello');
+      })
+          
 
        //update the services
-     
+       
+     // mail sender
+
+
+// End
 
 
 
@@ -265,6 +353,24 @@ finally{
 }
 run().catch(console.dir);
 
+// Email
+const email = {
+  from: 'myemail@example.com',
+  to: 'foyjurrahman11@gmail.com', 
+  subject: 'Hey you, awesome!',
+  text: 'Mailgun rocks, pow pow!'
+}
+
+
+app.post('/email', (req, res) => {
+  nodemailerMailgun.sendMail(email, (err, info) => {
+    
+  });
+  
+
+  res.send({status: true})
+});
+//end
 
 
 
